@@ -1,77 +1,110 @@
+"""
+    microarray.py - validação cruzada da classificação de dados de microarray
+
+    Pedro Sousa Lacerda (UFABC, 2015)
+    pslacerda@gmail.com
+
+
+
+    DISCUSSÃO DO CÓDIGO
+
+    O código que está lendo é baseado neste outro:
+
+            http://github.com/jrf/microarray
+
+            (avise-me se souber quem é o autor)
+
+    A. Selecionamos os genes mais "importantes". Para isto fazemos uma
+       classificação prévia com árvores aleatóreas de decisão treinadas com a
+       matriz de expressão gênica,
+
+    B. Fazemos a validação cruzada de um conjunto de classificadores (SVC, NB,
+       KNN, ...) considerando apenas os genes selecionados.
+
+    C. Consideramos primeiro apenas o gene mais importante, depois os dois
+       mais importantes ... até os NFEATURES mais importantes.
+
+
+    O resultado é uma figura comparando os vários métodos de classificação na
+    predição hipotética de doenças utilizando (1) microarray,expressão gênica; e
+    (2) aprendizagem de máquina, mineração de dados.
+
+
+
+    INSTRUÇÕES DE USO
+        python3 microarray.py NFOLDS NFEATURES SAMPLES_CSV LABELS_CSV OUTPUT_IMG
+
+
+    EXEMPLO DE USO
+        python3 microarray.py 10 20 khan2001x.csv khan2001y.csv out.pdf
+
+
+    DEFEITOS CONHECIDOS
+      Talvez a variável num_features possa desmembrada em duas outras? Ignore
+    com cuidado se encontrar este WARNING:, corrija sua linha de comandos.
+
+        The least populated class in y has only 8 members, which is too few. The
+        minimum number of labels for any class cannot be less than n_folds=10.
+
+    Para o programa "ficar completo" faltaria salvar os modelos num arquivo para
+    poder reusarmos posteriormente com o intuito de classificar novos pacientes,
+    auxiliando no diagnóstico de doenças. (e retroalimentá-lo quando confirmada
+    ou negada a doença).
+
+
+    LINKS RELACIONADOS
+      Outro protocolo (talvez melhor que este?):
+        http://bioinformatics.oxfordjournals.org/content/21/19/3755.full.pdf
+
+      Datasets:
+        http://github.com/ramhiser/datamicroarray/wiki
+        http://www.dcs.warwick.ac.uk/~yina/Datasets.htm
+
+"""
+
+import os
+import sys
+
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
-# Read in Singh data
-xsingh = pd.read_csv("singh2002x.csv", index_col=0)
-ysingh = pd.read_csv("singh2002y.csv", index_col=0)
-ysingh = ysingh.rename(columns={'x': 'y'})
+if (len(sys.argv) != 6):
+    print("USAGE: %s NFOLDS NFEATURES X_CSV Y_CSV OUTPUT_IMAGE" % sys.argv[0])
+    print("EXAMPLE: %s 10 20 khan2001x.csv khan2001y.csv out.pdf" % sys.argv[0])
+    print()
+    sys.exit(0)
 
-# Convert to numpy arrays
-Xsingh = np.array(xsingh)
-ysingh = np.array(ysingh)
+NFOLDS = int(sys.argv[1])
+assert NFOLDS > 0
 
-# Create an array of values, where 0 corresponds to 'Tumor' and 1 corresponds
-# to 'Normal'
+NFEATURES = int(sys.argv[2])
+assert NFEATURES > 0
 
-Ysingh = []
-for i in np.arange(0, len(ysingh)):
-    if ysingh[i] == 'Tumor':
-        Ysingh.append(0)
-    elif ysingh[i] == 'Normal':
-        Ysingh.append(1)
-Ysingh = np.array(Ysingh)
+SAMPLES_CSV = sys.argv[3]
+assert os.access(SAMPLES_CSV, os.R_OK)
 
+LABELS_CSV = sys.argv[4]
+assert os.access(LABELS_CSV, os.R_OK)
 
-# Read in Khan data
-xkhan = pd.read_csv("khan2001x.csv", index_col=0)
-ykhan = pd.read_csv("khan2001y.csv", index_col=0)
-ykhan = ykhan.rename(columns={'x': 'y'})
-
-# Convert to numpy arrays
-Xkhan = np.array(xkhan)
-ykhan = np.array(ykhan)
-
-# Create an array of values, where 0 corresponds to 'EWS', 1 corresponds to
-# 'RMS' 2 corresponds to 'NB' and 3 corresponds to 'BL'
-
-Ykhan = []
-for i in np.arange(0, len(ykhan)):
-    if ykhan[i] == 'EWS':
-        Ykhan.append(0)
-    elif ykhan[i] == 'RMS':
-        Ykhan.append(1)
-    elif ykhan[i] == 'NB':
-        Ykhan.append(2)
-    elif ykhan[i] == 'BL':
-        Ykhan.append(3)
-Ykhan = np.array(Ykhan)
+OUTPUT_IMG = sys.argv[5]
+# assert os.access(OUTPUT_IMAGE, os.W_OK)
 
 
-# In[4]:
-
-# Read in Golub data
-xgolub = pd.read_csv("golub1999x.csv", index_col=0)
-ygolub = pd.read_csv("golub1999y.csv", index_col=0)
-ygolub = ygolub.rename(columns={'x': 'y'})
-
-# Convert to numpy arrays
-Xgolub = np.array(xgolub)
-ygolub = np.array(ygolub)
-
-# Create an array of values, where 0 corresponds to 'ALL' and 1 corresponds to
-# 'AML'
-
-Ygolub = []
-for i in np.arange(0, len(ygolub)):
-    if ygolub[i] == 'ALL':
-        Ygolub.append(0)
-    elif ygolub[i] == 'AML':
-        Ygolub.append(1)
-Ygolub = np.array(Ygolub)
 
 
-# In[5]:
+
+# Read in expression matrix
+Xkhan = pd.read_csv(SAMPLES_CSV, index_col=0)
+Xkhan = Xkhan.values
+
+# Read in sample categories
+Ykhan = pd.read_csv(LABELS_CSV, index_col=0)
+Ykhan = pd.Categorical.from_array(Ykhan.values[:,0])
+Ykhan = Ykhan.codes
+
+
+
 
 from sklearn.ensemble import RandomForestClassifier
 
@@ -107,175 +140,42 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.lda import LDA
 
 
-def SVC_select_cv(X, Y, num_features):
-    scores = []
-    # kf = cross_validation.KFold(Y.size, n_folds=10)
-    skf = cross_validation.StratifiedKFold(Y, n_folds=10)
-    for train, test in skf:
-        X_train, X_test, y_train, y_test = X[train], X[test], Y[train], Y[test]
-        XRF_train, imp, ind, std = fitRF(X_train, y_train, est=2000)  # RFsel
-        XRF_test = X_test[:, ind]  # reorder test set after RFsel
-        clf = SVC(kernel='linear')
-        clf.fit(XRF_train[:, 0:num_features], y_train)
-        scores.append(clf.score(XRF_test[:, 0:num_features], y_test))
-    score = np.mean(scores)
-    return(score)
-
-
-def GNB_select_cv(X, Y, num_features):
-    scores = []
-    skf = cross_validation.StratifiedKFold(Y, n_folds=10)
-    for train, test in skf:
-        X_train, X_test, y_train, y_test = X[train], X[test], Y[train], Y[test]
-        XRF_train, imp, ind, std = fitRF(X_train, y_train, est=2000)  # RFsel
-        XRF_test = X_test[:, ind]  # reorder test set after RFsel
-        clf = GaussianNB()
-        clf.fit(XRF_train[:, 0:num_features], y_train)
-        scores.append(clf.score(XRF_test[:, 0:num_features], y_test))
-    score = np.mean(scores)
-    return(score)
-
-
-def NC_select_cv(X, Y, num_features):
-    scores = []
-    skf = cross_validation.StratifiedKFold(Y, n_folds=10)
-    for train, test in skf:
-        X_train, X_test, y_train, y_test = X[train], X[test], Y[train], Y[test]
-        XRF_train, imp, ind, std = fitRF(X_train, y_train, est=2000)  # RFsel
-        XRF_test = X_test[:, ind]  # reorder test set after RFsel
-        clf = NearestCentroid()
-        clf.fit(XRF_train[:, 0:num_features], y_train)
-        scores.append(clf.score(XRF_test[:, 0:num_features], y_test))
-    score = np.mean(scores)
-    return(score)
-
-
-def KNN_select_cv(X, Y, num_features):
-    scores = []
-    skf = cross_validation.StratifiedKFold(Y, n_folds=10)
-    for train, test in skf:
-        X_train, X_test, y_train, y_test = X[train], X[test], Y[train], Y[test]
-        XRF_train, imp, ind, std = fitRF(X_train, y_train, est=2000)  # RFsel
-        XRF_test = X_test[:, ind]  # reorder test set after RFsel
-        clf = KNeighborsClassifier()
-        clf.fit(XRF_train[:, 0:num_features], y_train)
-        scores.append(clf.score(XRF_test[:, 0:num_features], y_test))
-    score = np.mean(scores)
-    return(score)
-
-
-def LDA_select_cv(X, Y, num_features):
-    scores = []
-    skf = cross_validation.StratifiedKFold(Y, n_folds=10)
-    for train, test in skf:
-        X_train, X_test, y_train, y_test = X[train], X[test], Y[train], Y[test]
-        XRF_train, imp, ind, std = fitRF(X_train, y_train, est=2000)  # RFsel
-        XRF_test = X_test[:, ind]  # reorder test set after RFsel
-        clf = LDA()
-        clf.fit(XRF_train[:, 0:num_features], y_train)
-        scores.append(clf.score(XRF_test[:, 0:num_features], y_test))
-    score = np.mean(scores)
-    return(score)
-
-
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-num_features = 20
 
-print("\nGolub data\n")
-accL = np.zeros((5, num_features + 1))
-for j in np.arange(1, num_features + 1):
-    print("SVC classifier with num_features:", j)
-    accL[0, j] = SVC_select_cv(Xgolub, Ygolub, num_features=j)
-for j in np.arange(1, num_features + 1):
-    print("GaussianNB classifier with num_features:", j)
-    accL[1, j] = GNB_select_cv(Xgolub, Ygolub, num_features=j)
-for j in np.arange(1, num_features + 1):
-    print("NearestCentroid classifier with num_features:", j)
-    accL[2, j] = NC_select_cv(Xgolub, Ygolub, num_features=j)
-for j in np.arange(1, num_features + 1):
-    print("KNearestNeighbors classifier with num_features:", j)
-    accL[3, j] = KNN_select_cv(Xgolub, Ygolub, num_features=j)
-for j in np.arange(1, num_features + 1):
-    print("LDA classifier with num_features:", j)
-    accL[4, j] = LDA_select_cv(Xgolub, Ygolub, num_features=j)
-accL = accL[:, 1:num_features + 1]  # chop the leading zeros
+num_features = NFEATURES
+clfs = [lambda:SVC(kernel='linear'), GaussianNB]
+# clfs = [lambda:SVC(kernel='linear'), GaussianNB, NearestCentroid,
+#          KNeighborsClassifier, LDA, RandomForestClassifier]
 
-print("\nKhan data\n")
-accS = np.zeros((5, num_features + 1))
-for j in np.arange(1, num_features + 1):
-    print("SVC classifier with num_features:", j)
-    accS[0, j] = SVC_select_cv(Xkhan, Ykhan, num_features=j)
-for j in np.arange(1, num_features + 1):
-    print("GaussianNB classifier with num_features:", j)
-    accS[1, j] = GNB_select_cv(Xkhan, Ykhan, num_features=j)
-for j in np.arange(1, num_features + 1):
-    print("NearestCentroid classifier with num_features:", j)
-    accS[2, j] = NC_select_cv(Xkhan, Ykhan, num_features=j)
-for j in np.arange(1, num_features + 1):
-    print("KNearestNeighbors classifier with num_features:", j)
-    accS[3, j] = KNN_select_cv(Xkhan, Ykhan, num_features=j)
-for j in np.arange(1, num_features + 1):
-    print("LDA classifier with num_features:", j)
-    accS[4, j] = LDA_select_cv(Xkhan, Ykhan, num_features=j)
-accS = accS[:, 1:num_features + 1]  # chop the leading zeros
-
-print("\nSingh data\n")
-accP = np.zeros((5, num_features + 1))
-for j in np.arange(1, num_features + 1):
-    print("SVC classifier with num_features:", j)
-    accP[0, j] = SVC_select_cv(Xsingh, Ysingh, num_features=j)
-for j in np.arange(1, num_features + 1):
-    print("GaussianNB classifier with num_features:", j)
-    accP[1, j] = GNB_select_cv(Xsingh, Ysingh, num_features=j)
-for j in np.arange(1, num_features + 1):
-    print("NearestCentroid classifier with num_features:", j)
-    accP[2, j] = NC_select_cv(Xsingh, Ysingh, num_features=j)
-for j in np.arange(1, num_features + 1):
-    print("KNearestNeighbors classifier with num_features:", j)
-    accP[3, j] = KNN_select_cv(Xsingh, Ysingh, num_features=j)
-for j in np.arange(1, num_features + 1):
-    print("LDA classifier with num_features:", j)
-    accP[4, j] = LDA_select_cv(Xsingh, Ysingh, num_features=j)
-accP = accP[:, 1:num_features + 1]  # chop the leading zeros
-
-
-color = ['#348ABD', '#A60628', '#7A68A6', '#467821', '#D55E00', '#CC79A7']
 label = ['SVC', 'NB', 'NC', 'KNN', 'LDA', 'RF']
+color = ['#348ABD', '#A60628', '#7A68A6', '#467821', '#D55E00', '#CC79A7']
 
-# Leukemia
-plt.figure(figsize=(6, 9))
-plt.figure
-plt.subplot(311)
-for i in np.arange(0, 5):
-    plt.plot(np.arange(1, num_features + 1), accL[i, :], color[i],
+accS = np.zeros((5, num_features + 1))
+for i, clf in enumerate(clfs):
+    for j in range(1, num_features+1):
+        print('classifier=', label[i], ', nfeatures=ngenes=', j, sep='')
+
+        scores = []
+        skf = cross_validation.StratifiedKFold(Ykhan, n_folds=NFOLDS)
+        for train, test in skf:
+            X_train, X_test = Xkhan[train], Xkhan[test]
+            y_train, y_test = Ykhan[train], Ykhan[test]
+            XRF_train, imp, ind, std = fitRF(X_train, y_train, est=2000)  # RFsel
+            XRF_test = X_test[:, ind]  # reorder test set after RFsel
+            clf2 = clfs[i]()
+            clf2.fit(XRF_train[:, 0:j], y_train)
+            scores.append(clf2.score(XRF_test[:, 0:j], y_test))
+        score = np.mean(scores)
+        accS[i, j] = score
+
+    plt.plot(np.arange(0, num_features + 1), accS[i, :], color[i],
              label=label[i], alpha=0.85, lw=2)
-plt.xlim([1, num_features])
-plt.xticks(np.arange(1, num_features + 1), size='small')
-plt.ylabel('Accuracy', fontsize=8)
-plt.xlabel('Number of Genes (Leukemia)', fontsize=8)
 
-plt.suptitle('Stratified 10-Fold Cross-Validation Accuracy of Various\
-             Classifiers', fontsize=12)
+# accS = accS[:, 1:num_features + 1]  # chop the leading zeros
 
-plt.tick_params(axis='both', which='major', labelsize=8)
-plt.tick_params(axis='both', which='minor', labelsize=8)
-plt.subplots_adjust(hspace=.5)
-# plt.tick_params(\
-#    axis='x',          # changes apply to the x-axis
-#    which='both',      # both major and minor ticks are affected
-#    bottom='off',      # ticks along the bottom edge are off
-#    top='off',         # ticks along the top edge are off
-#   labelbottom='off') # labels along the bottom edge are off
-plt.legend(numpoints=1, ncol=6, loc=4, fontsize=8)
-# plt.legend(bbox_to_anchor=(1.3, 1))
 
-# SRBCT
-plt.subplot(312)
-for i in np.arange(0, 5):
-    plt.plot(np.arange(1, num_features + 1), accS[i, :], color[i],
-             label=label[i], alpha=0.85, lw=2)
 plt.xlim([1, num_features])
 plt.xticks(np.arange(1, num_features + 1), size='small')
 plt.ylabel('Accuracy', fontsize=8)
@@ -283,44 +183,8 @@ plt.xlabel('Number of Genes (SRBCT)', fontsize=8)
 plt.tick_params(axis='both', which='major', labelsize=8)
 plt.tick_params(axis='both', which='minor', labelsize=8)
 plt.subplots_adjust(hspace=.5)
-# plt.tick_params(\
-#    axis='x',          # changes apply to the x-axis
-#    which='both',      # both major and minor ticks are affected
-#    bottom='off',      # ticks along the bottom edge are off
-#    top='off',         # ticks along the top edge are off
-#    labelbottom='off') # labels along the bottom edge are off
 plt.legend(numpoints=1, ncol=6, loc=4, fontsize=8)
 
-# Prostate
-plt.subplot(313)
-for i in np.arange(0, 5):
-    plt.plot(np.arange(1, num_features + 1), accP[i, :], color[i],
-             label=label[i], alpha=0.85, lw=2)
-plt.xlim([1, num_features])
-plt.xticks(np.arange(1, num_features + 1), size='small')
-plt.ylabel('Accuracy', fontsize=8)
-plt.xlabel('Number of Genes (Prostate)', fontsize=8)
-plt.legend(numpoints=1, ncol=6, loc=4, fontsize=8)
-plt.tick_params(axis='both', which='major', labelsize=8)
-plt.tick_params(axis='both', which='minor', labelsize=8)
-# plt.tick_params(\
-#    axis='x',          # changes apply to the x-axis
-#    which='both',      # both major and minor ticks are affected
-#    bottom='off',      # ticks along the bottom edge are off
-#    top='off',         # ticks along the top edge are off
-#    labelbottom='off') # labels along the bottom edge are off
-# plt.legend(bbox_to_anchor=(1.3, 1))
-# plt.show()
-plt.savefig('cv.png')
-plt.savefig('cv.pdf')
 
+plt.savefig(OUTPUT_IMG)
 
-# CSS styling
-
-from IPython.core.display import HTML
-
-
-def css_styling():
-    styles = open("./custom.css", "r").read()
-    return HTML(styles)
-css_styling()
